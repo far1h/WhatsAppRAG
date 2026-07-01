@@ -4,21 +4,16 @@ from pathlib import Path
 
 from chromadb import PersistentClient
 from dotenv import load_dotenv
+from litellm import completion
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from tenacity import retry, wait_exponential
 
-from whatsapp_rag.model_config import (
-    DASHSCOPE_COMPATIBLE_BASE_URL,
-    answer_model,
-    chat_api_base_url,
-    chat_api_key,
-    query_model,
-)
-
 
 load_dotenv(override=True)
 
+DASHSCOPE_COMPATIBLE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+MODEL = os.getenv("CHAT_MODEL", "dashscope/qwen-plus")
 DB_NAME = str(Path(__file__).parent.parent / "preprocessed_db")
 
 collection_name = "docs"
@@ -71,7 +66,6 @@ def make_embedding_client() -> OpenAI:
 
 
 openai = make_embedding_client()
-chat_client = OpenAI(api_key=chat_api_key(), base_url=chat_api_base_url())
 
 
 class Result(BaseModel):
@@ -110,8 +104,8 @@ Return JSON only in this shape:
             f"{chunk.page_content}\n\n"
         )
 
-    response = chat_client.chat.completions.create(
-        model=query_model(),
+    response = completion(
+        model=MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -170,10 +164,7 @@ Current question:
 
 Return only the search query.
 """
-    response = chat_client.chat.completions.create(
-        model=query_model(),
-        messages=[{"role": "system", "content": message}],
-    )
+    response = completion(model=MODEL, messages=[{"role": "system", "content": message}])
     return response.choices[0].message.content.strip()
 
 
@@ -216,8 +207,5 @@ def answer_question(question: str, history: list[dict] | None = None) -> tuple[s
     history = history or []
     chunks = fetch_context(question, history)
     messages = make_rag_messages(question, history, chunks)
-    response = chat_client.chat.completions.create(
-        model=answer_model(),
-        messages=messages,
-    )
+    response = completion(model=MODEL, messages=messages)
     return response.choices[0].message.content, chunks

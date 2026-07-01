@@ -36,22 +36,17 @@ For Qwen through DashScope:
 
 ```bash
 DASHSCOPE_API_KEY=your_key_here
-DASHSCOPE_API_BASE=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
-SUMMARY_MODEL=qwen3.6-flash
-QUERY_MODEL=qwen3.6-flash
-ANSWER_MODEL=qwen3.7-plus
+CHAT_MODEL=dashscope/qwen-plus
 ```
 
-`SUMMARY_MODEL` is used during ingestion. `QUERY_MODEL` is used for query rewriting and the current lightweight rerank step. `ANSWER_MODEL` is used for final answers.
-
-Embeddings use DashScope automatically when `DASHSCOPE_API_KEY` is set and `OPENAI_API_KEY` is not set. You can also configure them explicitly:
+Embeddings use DashScope automatically when `DASHSCOPE_API_KEY` is set and `OPENAI_API_KEY` is not set. You can also configure it explicitly:
 
 ```bash
 EMBEDDING_PROVIDER=dashscope
 EMBEDDING_MODEL=text-embedding-v4
 ```
 
-If your DashScope account uses a workspace-specific compatible API base, replace `DASHSCOPE_API_BASE` with that URL. You can also set `CHAT_API_BASE` or `EMBEDDING_API_BASE` separately.
+If your DashScope account requires a region or workspace-specific compatible API base, also set `DASHSCOPE_API_BASE` or `EMBEDDING_API_BASE`.
 
 ## Privacy
 

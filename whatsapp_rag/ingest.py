@@ -4,28 +4,19 @@ from pathlib import Path
 
 from chromadb import PersistentClient
 from dotenv import load_dotenv
+from litellm import completion
 from openai import OpenAI
 from pydantic import BaseModel, Field
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import retry, wait_exponential
 from tqdm import tqdm
 
-from whatsapp_rag.model_config import (
-    DASHSCOPE_COMPATIBLE_BASE_URL,
-    chat_api_base_url,
-    chat_api_key,
-    summary_model,
-)
-from whatsapp_rag.safety import (
-    is_data_inspection_error,
-    make_fallback_summary,
-    sanitize_for_model,
-    should_retry_model_error,
-)
 from whatsapp_rag.whatsapp import create_conversation_chunks, parse_whatsapp_export
 
 
 load_dotenv(override=True)
 
+DASHSCOPE_COMPATIBLE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+CHAT_MODEL = os.getenv("CHAT_MODEL", "dashscope/qwen-plus")
 DB_NAME = str(Path(__file__).parent.parent / "preprocessed_db")
 KNOWLEDGE_BASE_PATH = Path(__file__).parent.parent / "knowledge-base"
 CHAT_EXPORT_PATH = KNOWLEDGE_BASE_PATH / "chat"
@@ -40,7 +31,6 @@ embedding_model = os.getenv(
     "text-embedding-v4" if embedding_provider == "dashscope" else "text-embedding-3-large",
 )
 wait = wait_exponential(multiplier=1, min=10, max=240)
-chat_client = OpenAI(api_key=chat_api_key(), base_url=chat_api_base_url())
 
 
 class Result(BaseModel):
@@ -134,46 +124,13 @@ def make_messages(document: dict) -> list[dict]:
     return [{"role": "user", "content": make_prompt(document)}]
 
 
-@retry(
-    wait=wait,
-    stop=stop_after_attempt(3),
-    retry=retry_if_exception(should_retry_model_error),
-    reraise=True,
-)
-def summarize_document(document: dict) -> ChunkSummary:
-    """Summarize a sanitized chunk with the chat model."""
-    response = chat_client.chat.completions.create(
-        model=summary_model(),
-        messages=make_messages(document),
-    )
-    reply = response.choices[0].message.content
-    return parse_chunk_summary(reply)
-
-
+@retry(wait=wait)
 def process_document(document: dict) -> Result:
-    """Create one searchable chunk, falling back when provider inspection blocks it."""
-    safe_document = make_safe_document(document)
-    metadata = dict(document["metadata"])
-
-    try:
-        summary = summarize_document(safe_document)
-        metadata["summary_status"] = "generated"
-    except Exception as error:
-        if not is_data_inspection_error(error):
-            raise
-        summary = ChunkSummary.model_validate(make_fallback_summary(metadata))
-        metadata["summary_status"] = "fallback_data_inspection"
-
-    text = f"{summary.headline}\n\n{summary.summary}\n\n{safe_document['text']}"
-    metadata["sanitized"] = safe_document["text"] != document["text"]
-    return Result(page_content=text, metadata=metadata)
-
-
-def make_safe_document(document: dict) -> dict:
-    """Copy a document and replace raw text with the cloud-facing safe text."""
-    safe_document = dict(document)
-    safe_document["text"] = sanitize_for_model(document["text"])
-    return safe_document
+    response = completion(model=CHAT_MODEL, messages=make_messages(document))
+    reply = response.choices[0].message.content
+    summary = parse_chunk_summary(reply)
+    text = f"{summary.headline}\n\n{summary.summary}\n\n{document['text']}"
+    return Result(page_content=text, metadata=document["metadata"])
 
 
 def parse_chunk_summary(reply: str) -> ChunkSummary:
