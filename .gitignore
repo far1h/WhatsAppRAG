@@ -168,6 +168,7 @@ model_cache/
 # Ignore Chroma vector database
 vector_db/
 products_vectorstore/
+preprocessed_db/
 
 # And ignore any pickle files made during the course
 *.pkl
@@ -175,6 +176,8 @@ products_vectorstore/
 # ignore gradio private files
 .gradio
 /.gradio
+_chat.txt
+knowledge-base/
 
 # ignore diagnostics reports
 **/report.txt
