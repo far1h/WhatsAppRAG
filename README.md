@@ -51,3 +51,55 @@ If your DashScope account requires a region or workspace-specific compatible API
 ## Privacy
 
 Do not commit raw chat exports, generated knowledge base files, `.env`, or vector databases. They are local-only project data.
+
+## Next Steps
+
+Possible directions to explore:
+
+- [ ] Improve chunking quality.
+  - Tune the 30-minute conversation gap.
+  - Add max chunk size protection for very long conversations.
+  - Keep a short overlap between adjacent chunks when a conversation spans a long time.
+
+- [ ] Add metadata filters.
+  - Filter retrieval by participant.
+  - Filter retrieval by date or date range.
+  - Extract events, places, plans, and recurring topics during ingestion.
+
+- [ ] Try Graph RAG.
+  - Build a small graph of people, dates, topics, plans, locations, and message chunks.
+  - Link chunks to entities such as `Kei`, `running`, `Paris`, `ESN`, or specific dates.
+  - Use graph traversal before vector search for questions like “what plans changed over time?” or “what topics kept coming back?”
+  - Start simple with an in-memory or SQLite-backed graph before trying a dedicated graph database.
+
+- [ ] Improve reranking.
+  - Compare Qwen reranking against embedding-only retrieval.
+  - Add a lightweight scoring trace so it is easier to see why a chunk was selected.
+  - Test factual questions against known answers from the chat.
+
+- [ ] Explore Apple Foundation Models.
+  - Prototype an iOS/macOS version using Apple’s Foundation Models framework for on-device answering or summarization.
+  - Try guided generation for structured outputs like events, people, and plans.
+  - Explore tool calling so the model can query a local chat index.
+  - Keep privacy as the main reason to test on-device inference.
+
+- [ ] Think through mobile deployment.
+  - Decide whether ingestion happens on desktop first, then syncs an index to the phone, or happens fully on-device.
+  - Store local chunks and metadata in SQLite/Core Data.
+  - Evaluate vector search options on-device versus a private local/server backend.
+  - Build a minimal SwiftUI chat interface.
+  - Add an import flow for WhatsApp export files.
+  - Make failure states clear when the index is missing, stale, or too large.
+
+- [ ] Longer-term ideas.
+  - Multi-chat support.
+  - Timeline view of plans and important moments.
+  - Topic clustering.
+  - “Memory audit” mode that shows sources for every answer.
+  - Private evaluation set for regression testing retrieval quality.
+
+Useful references:
+
+- Apple Foundation Models documentation: https://developer.apple.com/documentation/foundationmodels
+- Apple Intelligence developer overview: https://developer.apple.com/apple-intelligence/
+- Chunking notes for this project: `docs/chunking.md`
