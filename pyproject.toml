@@ -1,0 +1,18 @@
+[project]
+name = "whatsapp-rag"
+version = "0.1.0"
+description = "A local RAG app for querying exported WhatsApp chat history."
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.0.0",
+    "gradio>=5.0.0",
+    "litellm>=1.0.0",
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "tenacity>=8.0.0",
+    "tqdm>=4.0.0",
+]
+
+[tool.uv]
+package = false
