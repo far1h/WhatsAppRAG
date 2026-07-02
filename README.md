@@ -43,9 +43,10 @@ SUMMARY_MODEL=gemini/gemini-2.5-flash
 QUERY_MODEL=gemini/gemini-2.5-flash
 ANSWER_MODEL=gemini/gemini-3.5
 EMBEDDING_MODEL=gemini/gemini-embedding-2
+WORKERS=10
 ```
 
-`SUMMARY_MODEL` is used during ingestion. `QUERY_MODEL` is used for query rewriting and reranking. `ANSWER_MODEL` is used for final answers. `EMBEDDING_MODEL` is used for indexing and retrieval.
+`SUMMARY_MODEL` is used during ingestion. `QUERY_MODEL` is used for query rewriting and reranking. `ANSWER_MODEL` is used for final answers. `EMBEDDING_MODEL` is used for indexing and retrieval. `WORKERS` controls parallel summarization during ingestion.
 
 The app uses LiteLLM, so model names include the provider prefix such as `gemini/`. To switch providers, set the relevant provider API key and update the model names in `.env`.
 

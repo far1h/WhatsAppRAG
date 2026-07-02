@@ -1,4 +1,5 @@
 import json
+import os
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -22,7 +23,7 @@ CHAT_EXPORT_PATH = KNOWLEDGE_BASE_PATH / "chat"
 
 collection_name = "docs"
 wait = wait_exponential(multiplier=1, min=10, max=240)
-WORKERS = 10
+WORKERS = int(os.getenv("WORKERS", "10"))
 
 
 class Result(BaseModel):

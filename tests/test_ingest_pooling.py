@@ -1,3 +1,5 @@
+import importlib
+import os
 import unittest
 from unittest.mock import Mock, patch
 
@@ -5,6 +7,15 @@ from whatsapp_rag import ingest
 
 
 class IngestPoolingTest(unittest.TestCase):
+    def test_workers_can_be_configured_from_env(self):
+        original_workers = ingest.WORKERS
+        self.addCleanup(self._restore_workers, original_workers)
+
+        with patch.dict(os.environ, {"WORKERS": "7"}, clear=False), patch("dotenv.load_dotenv"):
+            reloaded = importlib.reload(ingest)
+
+        self.assertEqual(reloaded.WORKERS, 7)
+
     def test_create_chunks_processes_documents_with_worker_pool_and_tqdm(self):
         documents = [{"text": "first"}, {"text": "second"}]
         first = ingest.Result(page_content="first result", metadata={"source": "first"})
@@ -26,6 +37,12 @@ class IngestPoolingTest(unittest.TestCase):
         pool.imap_unordered.assert_called_once_with(ingest.process_document, documents)
         progress.assert_called_once_with(pool.imap_unordered.return_value, total=len(documents))
         self.assertEqual(chunks, [first, second])
+
+    def _restore_workers(self, original_workers):
+        with patch.dict(os.environ, {"WORKERS": str(original_workers)}, clear=False), patch(
+            "dotenv.load_dotenv"
+        ):
+            importlib.reload(ingest)
 
 
 if __name__ == "__main__":
