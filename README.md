@@ -30,23 +30,26 @@ uv run app.py
 
 ## Environment
 
-Create a local `.env` file with the model keys you want to use.
-
-For Qwen through DashScope:
+Create a local `.env` file with your Gemini key:
 
 ```bash
-DASHSCOPE_API_KEY=your_key_here
-CHAT_MODEL=dashscope/qwen-plus
+GEMINI_API_KEY=your_key_here
 ```
 
-Embeddings use DashScope automatically when `DASHSCOPE_API_KEY` is set and `OPENAI_API_KEY` is not set. You can also configure it explicitly:
+The default models are:
 
 ```bash
-EMBEDDING_PROVIDER=dashscope
-EMBEDDING_MODEL=text-embedding-v4
+SUMMARY_MODEL=gemini/gemini-2.5-flash
+QUERY_MODEL=gemini/gemini-2.5-flash
+ANSWER_MODEL=gemini/gemini-3.5
+EMBEDDING_MODEL=gemini/gemini-embedding-2
 ```
 
-If your DashScope account requires a region or workspace-specific compatible API base, also set `DASHSCOPE_API_BASE` or `EMBEDDING_API_BASE`.
+`SUMMARY_MODEL` is used during ingestion. `QUERY_MODEL` is used for query rewriting and reranking. `ANSWER_MODEL` is used for final answers. `EMBEDDING_MODEL` is used for indexing and retrieval.
+
+The app uses LiteLLM, so model names include the provider prefix such as `gemini/`. To switch providers, set the relevant provider API key and update the model names in `.env`.
+
+After changing the embedding model, rebuild the vector database with `uv run python -m whatsapp_rag.ingest`.
 
 ## Privacy
 

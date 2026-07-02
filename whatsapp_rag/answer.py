@@ -1,30 +1,24 @@
 import json
-import os
 from pathlib import Path
 
 from chromadb import PersistentClient
 from dotenv import load_dotenv
 from litellm import completion
-from openai import OpenAI
 from pydantic import BaseModel, Field
 from tenacity import retry, wait_exponential
+
+from whatsapp_rag.embeddings import embed_query
+from whatsapp_rag.model_config import (
+    answer_model,
+    query_model,
+)
 
 
 load_dotenv(override=True)
 
-DASHSCOPE_COMPATIBLE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-MODEL = os.getenv("CHAT_MODEL", "dashscope/qwen-plus")
 DB_NAME = str(Path(__file__).parent.parent / "preprocessed_db")
 
 collection_name = "docs"
-embedding_provider = os.getenv(
-    "EMBEDDING_PROVIDER",
-    "dashscope" if os.getenv("DASHSCOPE_API_KEY") and not os.getenv("OPENAI_API_KEY") else "openai",
-).lower()
-embedding_model = os.getenv(
-    "EMBEDDING_MODEL",
-    "text-embedding-v4" if embedding_provider == "dashscope" else "text-embedding-3-large",
-)
 wait = wait_exponential(multiplier=1, min=10, max=240)
 
 chroma = PersistentClient(path=DB_NAME)
@@ -45,27 +39,6 @@ Retrieved chat context:
 
 Answer the user's question accurately and concisely.
 """
-
-
-def make_embedding_client() -> OpenAI:
-    """Create an OpenAI-compatible embedding client."""
-    if embedding_provider == "dashscope":
-        return OpenAI(
-            api_key=os.getenv("EMBEDDING_API_KEY") or os.getenv("DASHSCOPE_API_KEY"),
-            base_url=os.getenv("EMBEDDING_API_BASE")
-            or os.getenv("DASHSCOPE_API_BASE")
-            or DASHSCOPE_COMPATIBLE_BASE_URL,
-        )
-
-    kwargs = {}
-    if os.getenv("EMBEDDING_API_KEY"):
-        kwargs["api_key"] = os.getenv("EMBEDDING_API_KEY")
-    if os.getenv("EMBEDDING_API_BASE"):
-        kwargs["base_url"] = os.getenv("EMBEDDING_API_BASE")
-    return OpenAI(**kwargs)
-
-
-openai = make_embedding_client()
 
 
 class Result(BaseModel):
@@ -105,7 +78,7 @@ Return JSON only in this shape:
         )
 
     response = completion(
-        model=MODEL,
+        model=query_model(),
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -164,7 +137,10 @@ Current question:
 
 Return only the search query.
 """
-    response = completion(model=MODEL, messages=[{"role": "system", "content": message}])
+    response = completion(
+        model=query_model(),
+        messages=[{"role": "system", "content": message}],
+    )
     return response.choices[0].message.content.strip()
 
 
@@ -184,7 +160,7 @@ def fetch_context_unranked(question: str) -> list[Result]:
             "before asking questions."
         )
 
-    query = openai.embeddings.create(model=embedding_model, input=[question]).data[0].embedding
+    query = embed_query(question)
     results = collection.query(query_embeddings=[query], n_results=RETRIEVAL_K)
     chunks = []
     for result in zip(results["documents"][0], results["metadatas"][0]):
@@ -207,5 +183,8 @@ def answer_question(question: str, history: list[dict] | None = None) -> tuple[s
     history = history or []
     chunks = fetch_context(question, history)
     messages = make_rag_messages(question, history, chunks)
-    response = completion(model=MODEL, messages=messages)
+    response = completion(
+        model=answer_model(),
+        messages=messages,
+    )
     return response.choices[0].message.content, chunks

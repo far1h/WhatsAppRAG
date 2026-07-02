@@ -1,36 +1,28 @@
 import json
-import os
+from multiprocessing import Pool
 from pathlib import Path
 
 from chromadb import PersistentClient
 from dotenv import load_dotenv
 from litellm import completion
-from openai import OpenAI
 from pydantic import BaseModel, Field
 from tenacity import retry, wait_exponential
 from tqdm import tqdm
 
+from whatsapp_rag.embeddings import embed_texts
+from whatsapp_rag.model_config import summary_model
 from whatsapp_rag.whatsapp import create_conversation_chunks, parse_whatsapp_export
 
 
 load_dotenv(override=True)
 
-DASHSCOPE_COMPATIBLE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-CHAT_MODEL = os.getenv("CHAT_MODEL", "dashscope/qwen-plus")
 DB_NAME = str(Path(__file__).parent.parent / "preprocessed_db")
 KNOWLEDGE_BASE_PATH = Path(__file__).parent.parent / "knowledge-base"
 CHAT_EXPORT_PATH = KNOWLEDGE_BASE_PATH / "chat"
 
 collection_name = "docs"
-embedding_provider = os.getenv(
-    "EMBEDDING_PROVIDER",
-    "dashscope" if os.getenv("DASHSCOPE_API_KEY") and not os.getenv("OPENAI_API_KEY") else "openai",
-).lower()
-embedding_model = os.getenv(
-    "EMBEDDING_MODEL",
-    "text-embedding-v4" if embedding_provider == "dashscope" else "text-embedding-3-large",
-)
 wait = wait_exponential(multiplier=1, min=10, max=240)
+WORKERS = 10
 
 
 class Result(BaseModel):
@@ -125,12 +117,15 @@ def make_messages(document: dict) -> list[dict]:
 
 
 @retry(wait=wait)
-def process_document(document: dict) -> Result:
-    response = completion(model=CHAT_MODEL, messages=make_messages(document))
+def process_document(document: dict) -> list[Result]:
+    response = completion(
+        model=summary_model(),
+        messages=make_messages(document),
+    )
     reply = response.choices[0].message.content
     summary = parse_chunk_summary(reply)
     text = f"{summary.headline}\n\n{summary.summary}\n\n{document['text']}"
-    return Result(page_content=text, metadata=document["metadata"])
+    return [Result(page_content=text, metadata=document["metadata"])]
 
 
 def parse_chunk_summary(reply: str) -> ChunkSummary:
@@ -145,22 +140,21 @@ def parse_chunk_summary(reply: str) -> ChunkSummary:
 
 
 def create_chunks(documents: list[dict]) -> list[Result]:
-    """Create summarized searchable chunks from parsed conversations."""
+    """Create summarized searchable chunks from parsed conversations in parallel."""
     chunks = []
-    for document in tqdm(documents):
-        chunks.append(process_document(document))
+    with Pool(processes=WORKERS) as pool:
+        for result in tqdm(pool.imap_unordered(process_document, documents), total=len(documents)):
+            chunks.extend(result)
     return chunks
 
 
 def create_embeddings(chunks: list[Result]) -> None:
-    openai = make_embedding_client()
     chroma = PersistentClient(path=DB_NAME)
     if collection_name in [c.name for c in chroma.list_collections()]:
         chroma.delete_collection(collection_name)
 
     texts = [chunk.page_content for chunk in chunks]
-    emb = openai.embeddings.create(model=embedding_model, input=texts).data
-    vectors = [e.embedding for e in emb]
+    vectors = embed_texts(texts)
 
     collection = chroma.get_or_create_collection(collection_name)
 
@@ -169,24 +163,6 @@ def create_embeddings(chunks: list[Result]) -> None:
 
     collection.add(ids=ids, embeddings=vectors, documents=texts, metadatas=metas)
     print(f"Vectorstore created with {collection.count()} documents")
-
-
-def make_embedding_client() -> OpenAI:
-    """Create an OpenAI-compatible embedding client."""
-    if embedding_provider == "dashscope":
-        return OpenAI(
-            api_key=os.getenv("EMBEDDING_API_KEY") or os.getenv("DASHSCOPE_API_KEY"),
-            base_url=os.getenv("EMBEDDING_API_BASE")
-            or os.getenv("DASHSCOPE_API_BASE")
-            or DASHSCOPE_COMPATIBLE_BASE_URL,
-        )
-
-    kwargs = {}
-    if os.getenv("EMBEDDING_API_KEY"):
-        kwargs["api_key"] = os.getenv("EMBEDDING_API_KEY")
-    if os.getenv("EMBEDDING_API_BASE"):
-        kwargs["base_url"] = os.getenv("EMBEDDING_API_BASE")
-    return OpenAI(**kwargs)
 
 
 if __name__ == "__main__":

@@ -6,8 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "chromadb>=1.0.0",
     "gradio>=5.0.0",
-    "litellm>=1.0.0",
-    "openai>=1.0.0",
+    "litellm>=1.81.9",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
     "tenacity>=8.0.0",

@@ -1,4 +1,3 @@
-import ast
 from pathlib import Path
 import tomllib
 import unittest
@@ -7,29 +6,26 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class LiteLLMChatConfigTest(unittest.TestCase):
-    def test_project_declares_litellm_dependency(self):
+class LiteLLMGeminiConfigTest(unittest.TestCase):
+    def test_project_uses_litellm_sdk_for_gemini(self):
         pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        dependencies = pyproject["project"]["dependencies"]
 
-        self.assertIn("litellm>=1.0.0", pyproject["project"]["dependencies"])
+        self.assertTrue(any(dep.startswith("litellm>=") for dep in dependencies))
+        self.assertFalse(any(dep.startswith("google-genai>=") for dep in dependencies))
+        self.assertFalse(any(dep.startswith("openai>=") for dep in dependencies))
 
-    def test_chat_modules_use_litellm_completion_with_qwen_plus_default(self):
+    def test_chat_modules_use_litellm_without_qwen_defaults(self):
         for module_name in ("answer.py", "ingest.py"):
             with self.subTest(module=module_name):
                 source = (ROOT / "whatsapp_rag" / module_name).read_text()
-                tree = ast.parse(source)
 
-                self.assertTrue(imports_litellm_completion(tree))
-                self.assertIn('os.getenv("CHAT_MODEL", "dashscope/qwen-plus")', source)
+                self.assertIn("from litellm import completion", source)
                 self.assertIn("completion(", source)
-
-
-def imports_litellm_completion(tree: ast.Module) -> bool:
-    """Return whether a module imports LiteLLM's completion helper."""
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "litellm":
-            return any(alias.name == "completion" for alias in node.names)
-    return False
+                self.assertNotIn("make_openai_compatible_client", source)
+                self.assertNotIn(".chat.completions.create(", source)
+                self.assertNotIn("qwen-plus", source)
+                self.assertNotIn("DASHSCOPE", source)
 
 
 if __name__ == "__main__":
