@@ -5,16 +5,23 @@ from whatsapp_rag.model_config import (
 )
 
 
+EMBEDDING_BATCH_SIZE = 100
+
+
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts with Gemini embeddings."""
+    """Embed texts with Gemini embeddings in API-sized batches."""
     if not texts:
         return []
 
-    response = embedding(
-        model=embedding_model(),
-        input=texts,
-    )
-    return [item["embedding"] for item in response["data"]]
+    vectors = []
+    for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+        batch = texts[start : start + EMBEDDING_BATCH_SIZE]
+        response = embedding(
+            model=embedding_model(),
+            input=batch,
+        )
+        vectors.extend(item["embedding"] for item in response["data"])
+    return vectors
 
 
 def embed_query(text: str) -> list[float]:
