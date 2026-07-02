@@ -5,7 +5,7 @@ from chromadb import PersistentClient
 from dotenv import load_dotenv
 from litellm import completion
 from pydantic import BaseModel, Field
-from tenacity import retry, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, wait_exponential
 
 from whatsapp_rag.embeddings import embed_query
 from whatsapp_rag.model_config import (
@@ -50,6 +50,10 @@ class RankOrder(BaseModel):
     order: list[int] = Field(
         description="Chunk ids ranked from most relevant to least relevant."
     )
+
+
+class EmptyVectorDatabaseError(RuntimeError):
+    """Raised when the local vector database has no indexed documents."""
 
 
 @retry(wait=wait)
@@ -154,12 +158,6 @@ def merge_chunks(chunks: list[Result], reranked: list[Result]) -> list[Result]:
 
 
 def fetch_context_unranked(question: str) -> list[Result]:
-    if collection.count() == 0:
-        raise RuntimeError(
-            "Vector database is empty. Run `uv run python -m whatsapp_rag.ingest` "
-            "before asking questions."
-        )
-
     query = embed_query(question)
     results = collection.query(query_embeddings=[query], n_results=RETRIEVAL_K)
     chunks = []
@@ -169,6 +167,13 @@ def fetch_context_unranked(question: str) -> list[Result]:
 
 
 def fetch_context(original_question: str, history: list[dict] | None = None) -> list[Result]:
+    count = collection.count()
+    if count == 0:
+        raise EmptyVectorDatabaseError(
+            "Vector database is empty. Run `uv run python -m whatsapp_rag.ingest` "
+            "before asking questions."
+        )
+
     rewritten_question = rewrite_query(original_question, history)
     chunks1 = fetch_context_unranked(original_question)
     chunks2 = fetch_context_unranked(rewritten_question)
@@ -177,7 +182,7 @@ def fetch_context(original_question: str, history: list[dict] | None = None) -> 
     return reranked[:FINAL_K]
 
 
-@retry(wait=wait)
+@retry(wait=wait, retry=retry_if_not_exception_type(EmptyVectorDatabaseError))
 def answer_question(question: str, history: list[dict] | None = None) -> tuple[str, list[Result]]:
     """Answer a question using the indexed WhatsApp chat context."""
     history = history or []
